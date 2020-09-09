@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+}
+
+group 'io.sealights.gradle.tests'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testCompile 'io.sealights.on-premise.agents:java-agent-component-tests-infra:3.0.0-SNAPSHOT'
+}

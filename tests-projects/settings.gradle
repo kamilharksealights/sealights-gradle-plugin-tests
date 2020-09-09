@@ -1,0 +1,5 @@
+include ':java-only-android-gradle-project'
+include ':java-only-gradle-project'
+include ':kolin-gradle-project'
+include ':kotlin-android-gradle-project'
+rootProject.name = "tests-projects"

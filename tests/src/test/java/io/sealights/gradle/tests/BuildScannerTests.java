@@ -8,6 +8,8 @@ import io.sealights.onpremise.agents.infra.component.tests.mockserver.MockServer
 import io.sealights.onpremise.agents.infra.env.OsDetector;
 import io.sealights.onpremise.agents.infra.types.Component;
 import lombok.SneakyThrows;
+import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -15,10 +17,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Scanner;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
@@ -26,24 +26,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BuildScannerTests {
 
-    private static final String TESTS_PROJECTS_DIR = "../tests-projects";
-    private String[] gradleVersions = new String[] { //todo should come from env var
-            "6.6.1",
-    };
+    private ObjectMapper objectMapper = getObjectMapper();
+    private Map<String, List<String>> gradleToAndroidVersions = Map.of(
+//            "6.1.1", List.of("4.0.1", "3.1.0"),
+//            "5.6.4", List.of("3.6.4", "3.1.0"),
+//            "4.10.3", List.of("3.3.3", "3.1.0"),
+            "4.4.1", List.of("3.1.0")
+    );
 
+    private static final String TESTS_PROJECTS_DIR = "../tests-projects";
     private static String token;
     private static DefaultMockServerAPI mockServerAPI;
 
-    private static ObjectMapper objectMapper = getObjectMapper();
-
-    private static ObjectMapper getObjectMapper() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.configure(FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return objectMapper;
-    }
-
     @BeforeClass
-    public static void beforeClass() throws Exception {
+    public static void beforeClass() {
         mockServerAPI = new DefaultMockServerAPI();
         MockServer.INSTANCE.run(mockServerAPI, ".");
         // TODO recommend latest version?
@@ -52,15 +48,17 @@ public class BuildScannerTests {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         MockServer.INSTANCE.shutdown();
     }
 
     @Test
     public void shouldScanJavaProject() throws IOException, InterruptedException {
         String projectName = "java-only-gradle-project";
-        for (String gradleVersion : gradleVersions) {
-            setGradleVersion(gradleVersion);
+
+        for (String gradleVersion : gradleToAndroidVersions.keySet()) {
+
+            setGradleVersion(projectName, gradleVersion);
             executeBuild(projectName, "buildNameAbc");
 
             List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
@@ -82,40 +80,48 @@ public class BuildScannerTests {
     }
 
     private void executeBuild(String projectName, String buildName) throws IOException, InterruptedException {
-        executeGradleCommand(Arrays.asList(
-                String.format(":%s:%s", projectName, "clean"),
-                String.format(":%s:%s", projectName, "build"),
+        executeGradleCommand(
+                projectName, "clean", "build",
                 String.format("-DslToken=%s", token),
-                String.format("-DbuildName=%s", buildName))
+                String.format("-DbuildName=%s", buildName),
+                "--stacktrace"
         );
 
     }
 
-    private void setGradleVersion(String gradleVersion) throws IOException, InterruptedException {
-        executeGradleCommand(Arrays.asList("wrapper", "--gradle-version", gradleVersion));
+    private void setGradleVersion(String projectName, String gradleVersion) throws IOException, InterruptedException {
+        executeGradleCommand(projectName, "wrapper", "--gradle-version", gradleVersion);
     }
 
-    private String executeGradleCommand(List<String> command) throws IOException, InterruptedException {
-        File projectDirFile = new File(TESTS_PROJECTS_DIR);
+    private void executeGradleCommand(String projectName, String ...args) throws IOException, InterruptedException {
+        File projectDirFile = new File(TESTS_PROJECTS_DIR, projectName);
         String gradlewExecutableName = OsDetector.isWindows() ? "gradlew.bat" : "gradlew";
         String gradlew = new File(projectDirFile, gradlewExecutableName).getAbsolutePath();
-        ArrayList<String> finalCommand = new ArrayList<>();
-        finalCommand.add(gradlew);
-        finalCommand.addAll(command);
+
+        LinkedList<String> finalCommand = new LinkedList<>(Arrays.asList(args));
+        finalCommand.addFirst(gradlew);
+
+        System.out.println("running command: " + String.join(" ", finalCommand));
+
         ProcessBuilder processBuilder = new ProcessBuilder(finalCommand.toArray(new String[]{}));
         processBuilder.directory(projectDirFile);
         processBuilder.redirectErrorStream(true);
         Process process = processBuilder.start();
-
-        Scanner s = new Scanner(process.getInputStream());
-        StringBuilder text = new StringBuilder();
-        while (s.hasNextLine()) {
-            text.append(s.nextLine());
-            text.append("\n");
-        }
-        s.close();
+        String gradleOutput = readOutput(process);
         int status = process.waitFor();
-        Assert.assertEquals("Gradle execution failed: " + text.toString(),0, status);
-        return text.toString();
+        Assert.assertEquals("Gradle execution failed: " + gradleOutput,0, status);
+        System.out.println(gradleOutput);
     }
+
+    @NotNull
+    private String readOutput(Process process) throws IOException {
+        return IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
+    }
+
+    private ObjectMapper getObjectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(FAIL_ON_UNKNOWN_PROPERTIES, false);
+        return objectMapper;
+    }
+
 }

@@ -10,6 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@sealights/server-mock": "file:C:\\Users\\Bartosz Kaczkowski\\IdeaProjects\\SL.Tools\\Agents\\mock-server\\sealights-server-mock-1.0.8.tgz"
+    "@sealights/server-mock": "file:/home/kamil/workspace/sealights/SL.Tools/Agents/mock-server/"
   }
 }

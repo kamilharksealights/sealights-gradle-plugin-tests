@@ -90,6 +90,7 @@ public class BuildScannerTests {
     }
 
     private void setGradleVersion(String projectName, String gradleVersion) throws IOException, InterruptedException {
+        executeGradleCommand(projectName, "--version");
         executeGradleCommand(projectName, "wrapper", "--gradle-version", gradleVersion);
     }
 

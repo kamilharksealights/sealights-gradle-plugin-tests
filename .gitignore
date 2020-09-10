@@ -3,6 +3,7 @@
 .idea
 build
 /**/node_modules/
-*.jar
 mock-server-*.txt
 package-lock.json
+*.jar
+!gradle-wrapper.jar

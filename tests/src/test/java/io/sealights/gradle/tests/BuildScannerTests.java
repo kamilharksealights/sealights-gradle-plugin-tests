@@ -8,6 +8,7 @@ import io.sealights.onpremise.agents.infra.component.tests.mockserver.MockServer
 import io.sealights.onpremise.agents.infra.env.OsDetector;
 import io.sealights.onpremise.agents.infra.types.Component;
 import lombok.SneakyThrows;
+import org.jetbrains.annotations.NotNull;
 import org.junit.*;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
@@ -26,11 +27,13 @@ public class BuildScannerTests {
 
     private static final String METADATA_BUILD_KEY = "build";
     private ObjectMapper objectMapper = getObjectMapper();
+
+
     private Map<String, List<String>> gradleToAndroidVersions = Map.of(
             "6.1.1", List.of("4.0.1", "3.1.0"),
             "5.6.4", List.of("3.6.4", "3.1.0"),
-            "4.10.3", List.of("3.3.3", "3.1.0"),
-            "4.4.1", List.of("3.1.0")
+            "4.10.3", List.of("3.3.3", "3.1.0")
+//            "4.4.1", List.of("3.1.0") // does not work with kotlin
     );
 
     private static final String TESTS_PROJECTS_DIR = "../tests-projects";
@@ -41,7 +44,6 @@ public class BuildScannerTests {
     public static void beforeClass() {
         mockServerAPI = new DefaultMockServerAPI();
         MockServer.INSTANCE.run(mockServerAPI, ".");
-        // TODO recommend latest version?
         mockServerAPI.setRecommendedVersion(Component.BUILD_SCANNER_COMPONENT_NAME, "3.0.1720", "https://agents.sealights.co/sealights-java/sealights-java-3.0.1720.zip");
         token = MockServer.INSTANCE.getToken(mockServerAPI);
     }
@@ -54,25 +56,40 @@ public class BuildScannerTests {
     @Test
     public void shouldScanJavaProject() throws Exception {
         String projectName = "java-only-gradle-project";
-
         for (String gradleVersion : gradleToAndroidVersions.keySet()) {
-
             setGradleVersion(projectName, gradleVersion);
-            String buildName = "buildNameAbc-" + gradleVersion;
+            String buildName = "java-build-" + gradleVersion;
+
             executeBuild(projectName, buildName);
 
             List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
-
-            // TODO add nice assertions
-            List<String> methodNames = agentEvents.stream()
-                    .filter(e -> e.getMeta().get(METADATA_BUILD_KEY).equals(buildName))
-                    .flatMap(event -> convertToBuildMapping(event).getFiles().stream())
-                    .flatMap(file -> file.getMethods().stream())
-                    .map(HashedMethodData::getDisplayName)
-                    .collect(Collectors.toList());
-
-            assertThat(methodNames).containsExactly("public int add(int, int)", "public JavaOnlyExampleClass()");
+            assertThat(extractMethodNames(agentEvents, buildName)).containsExactly("public int add(int, int)", "public JavaOnlyExampleClass()");
         }
+    }
+
+    @Test
+    public void shouldScanKotlinProject() throws Exception {
+        String projectName = "kotlin-gradle-project";
+        for (String gradleVersion : gradleToAndroidVersions.keySet()) {
+            setGradleVersion(projectName, gradleVersion);
+            String buildName = "kotlin-build-" + gradleVersion;
+
+            executeBuild(projectName, buildName);
+
+            List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
+            assertThat(extractMethodNames(agentEvents, buildName)).containsExactly("public final int multiply(int, int)", "public KotlinExampleClass()");
+        }
+    }
+
+    @NotNull
+    private List<String> extractMethodNames(List<DefaultMockServerAPI.BuildMapping> agentEvents, String buildName) {
+        List<String> methodNames = agentEvents.stream()
+                .filter(e -> e.getMeta().get(METADATA_BUILD_KEY).equals(buildName))
+                .flatMap(event -> convertToBuildMapping(event).getFiles().stream())
+                .flatMap(file -> file.getMethods().stream())
+                .map(HashedMethodData::getDisplayName)
+                .collect(Collectors.toList());
+        return methodNames;
     }
 
     @SneakyThrows

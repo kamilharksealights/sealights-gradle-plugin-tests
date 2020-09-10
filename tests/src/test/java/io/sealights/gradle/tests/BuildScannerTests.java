@@ -8,17 +8,18 @@ import io.sealights.onpremise.agents.infra.component.tests.mockserver.MockServer
 import io.sealights.onpremise.agents.infra.env.OsDetector;
 import io.sealights.onpremise.agents.infra.types.Component;
 import lombok.SneakyThrows;
-import org.apache.commons.io.IOUtils;
-import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.zeroturnaround.exec.ProcessExecutor;
+import org.zeroturnaround.exec.ProcessResult;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
@@ -53,13 +54,13 @@ public class BuildScannerTests {
     }
 
     @Test
-    public void shouldScanJavaProject() throws IOException, InterruptedException {
+    public void shouldScanJavaProject() throws Exception {
         String projectName = "java-only-gradle-project";
 
         for (String gradleVersion : gradleToAndroidVersions.keySet()) {
 
             setGradleVersion(projectName, gradleVersion);
-            executeBuild(projectName, "buildNameAbc");
+            executeBuild(projectName, "buildNameAbc" + gradleVersion);
 
             List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
 
@@ -79,22 +80,20 @@ public class BuildScannerTests {
         return objectMapper.readValue(objectMapper.writeValueAsString(rawBuildMapping), BuildMappingRequest.class);
     }
 
-    private void executeBuild(String projectName, String buildName) throws IOException, InterruptedException {
+    private void executeBuild(String projectName, String buildName) throws Exception {
         executeGradleCommand(
                 projectName, "clean", "build",
                 String.format("-DslToken=%s", token),
                 String.format("-DbuildName=%s", buildName),
                 "--stacktrace"
         );
-
     }
 
-    private void setGradleVersion(String projectName, String gradleVersion) throws IOException, InterruptedException {
-        executeGradleCommand(projectName, "--version");
+    private void setGradleVersion(String projectName, String gradleVersion) throws Exception {
         executeGradleCommand(projectName, "wrapper", "--gradle-version", gradleVersion);
     }
 
-    private void executeGradleCommand(String projectName, String ...args) throws IOException, InterruptedException {
+    private void executeGradleCommand(String projectName, String ...args) throws Exception {
         File projectDirFile = new File(TESTS_PROJECTS_DIR, projectName);
         String gradlewExecutableName = OsDetector.isWindows() ? "gradlew.bat" : "gradlew";
         String gradlew = new File(projectDirFile, gradlewExecutableName).getAbsolutePath();
@@ -104,19 +103,15 @@ public class BuildScannerTests {
 
         System.out.println("running command: " + String.join(" ", finalCommand));
 
-        ProcessBuilder processBuilder = new ProcessBuilder(finalCommand.toArray(new String[]{}));
-        processBuilder.directory(projectDirFile);
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        String gradleOutput = readOutput(process);
-        int status = process.waitFor();
-        Assert.assertEquals("Gradle execution failed: " + gradleOutput,0, status);
-        System.out.println(gradleOutput);
-    }
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        processExecutor.directory(projectDirFile);
+        ProcessExecutor command = processExecutor.command(finalCommand).destroyOnExit();
+        command.redirectOutput(System.out);
+        command.redirectError(System.err);
+        ProcessResult result = command.execute();
+        int status = result.getExitValue();
 
-    @NotNull
-    private String readOutput(Process process) throws IOException {
-        return IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
+        Assert.assertEquals("Gradle execution failed. See logs above.", 0, status);
     }
 
     private ObjectMapper getObjectMapper() {

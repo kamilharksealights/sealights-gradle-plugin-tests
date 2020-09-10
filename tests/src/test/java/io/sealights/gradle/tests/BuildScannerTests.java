@@ -8,10 +8,7 @@ import io.sealights.onpremise.agents.infra.component.tests.mockserver.MockServer
 import io.sealights.onpremise.agents.infra.env.OsDetector;
 import io.sealights.onpremise.agents.infra.types.Component;
 import lombok.SneakyThrows;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
@@ -27,11 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BuildScannerTests {
 
+    private static final String METADATA_BUILD_KEY = "build";
     private ObjectMapper objectMapper = getObjectMapper();
     private Map<String, List<String>> gradleToAndroidVersions = Map.of(
-//            "6.1.1", List.of("4.0.1", "3.1.0"),
-//            "5.6.4", List.of("3.6.4", "3.1.0"),
-//            "4.10.3", List.of("3.3.3", "3.1.0"),
+            "6.1.1", List.of("4.0.1", "3.1.0"),
+            "5.6.4", List.of("3.6.4", "3.1.0"),
+            "4.10.3", List.of("3.3.3", "3.1.0"),
             "4.4.1", List.of("3.1.0")
     );
 
@@ -48,8 +46,8 @@ public class BuildScannerTests {
         token = MockServer.INSTANCE.getToken(mockServerAPI);
     }
 
-    @After
-    public void tearDown() {
+    @AfterClass
+    public static void tearDown() {
         MockServer.INSTANCE.shutdown();
     }
 
@@ -60,12 +58,14 @@ public class BuildScannerTests {
         for (String gradleVersion : gradleToAndroidVersions.keySet()) {
 
             setGradleVersion(projectName, gradleVersion);
-            executeBuild(projectName, "buildNameAbc" + gradleVersion);
+            String buildName = "buildNameAbc-" + gradleVersion;
+            executeBuild(projectName, buildName);
 
             List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
 
             // TODO add nice assertions
             List<String> methodNames = agentEvents.stream()
+                    .filter(e -> e.getMeta().get(METADATA_BUILD_KEY).equals(buildName))
                     .flatMap(event -> convertToBuildMapping(event).getFiles().stream())
                     .flatMap(file -> file.getMethods().stream())
                     .map(HashedMethodData::getDisplayName)

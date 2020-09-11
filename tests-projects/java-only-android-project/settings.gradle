@@ -1,0 +1,2 @@
+include ':app'
+rootProject.name = "java-only-android-project"

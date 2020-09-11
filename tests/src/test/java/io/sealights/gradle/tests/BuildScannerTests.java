@@ -28,12 +28,10 @@ public class BuildScannerTests {
     private static final String METADATA_BUILD_KEY = "build";
     private ObjectMapper objectMapper = getObjectMapper();
 
-
-    private Map<String, List<String>> gradleToAndroidVersions = Map.of(
+    private Map<String, List<String>> gradleToAndroidPluginVersions = Map.of(
             "6.1.1", List.of("4.0.1", "3.1.0"),
             "5.6.4", List.of("3.6.4", "3.1.0"),
             "4.10.3", List.of("3.3.3", "3.1.0")
-//            "4.4.1", List.of("3.1.0") // does not work with kotlin
     );
 
     private static final String TESTS_PROJECTS_DIR = "../tests-projects";
@@ -56,7 +54,7 @@ public class BuildScannerTests {
     @Test
     public void shouldScanJavaProject() throws Exception {
         String projectName = "java-only-gradle-project";
-        for (String gradleVersion : gradleToAndroidVersions.keySet()) {
+        for (String gradleVersion : gradleToAndroidPluginVersions.keySet()) {
             setGradleVersion(projectName, gradleVersion);
             String buildName = "java-build-" + gradleVersion;
 
@@ -70,7 +68,7 @@ public class BuildScannerTests {
     @Test
     public void shouldScanKotlinProject() throws Exception {
         String projectName = "kotlin-gradle-project";
-        for (String gradleVersion : gradleToAndroidVersions.keySet()) {
+        for (String gradleVersion : gradleToAndroidPluginVersions.keySet()) {
             setGradleVersion(projectName, gradleVersion);
             String buildName = "kotlin-build-" + gradleVersion;
 
@@ -78,6 +76,23 @@ public class BuildScannerTests {
 
             List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
             assertThat(extractMethodNames(agentEvents, buildName)).containsExactly("public final int multiply(int, int)", "public KotlinExampleClass()");
+        }
+    }
+    @Test
+    public void shouldScanJavaAndroidProjects() throws Exception {
+        String projectName = "java-only-android-project";
+        for (String gradleVersion : gradleToAndroidPluginVersions.keySet()) {
+            setGradleVersion(projectName, gradleVersion);
+
+            for (String androidPluginVersion : gradleToAndroidPluginVersions.get(gradleVersion)) {
+                String buildName = "android-build-" + gradleVersion;
+
+                executeAndroidBuild(projectName, buildName, androidPluginVersion);
+
+                List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
+                assertThat(extractMethodNames(agentEvents, buildName)).
+                        containsOnly("public void javaMethod()", "protected void onCreate(Bundle)", "public MainActivity()");
+            }
         }
     }
 
@@ -101,10 +116,19 @@ public class BuildScannerTests {
         executeGradleCommand(
                 projectName, "clean", "build",
                 String.format("-DslToken=%s", token),
-                String.format("-DbuildName=%s", buildName),
-                "--stacktrace"
+                String.format("-DbuildName=%s", buildName)
         );
     }
+
+    private void executeAndroidBuild(String projectName, String buildName, String androidPluginVersion) throws Exception {
+        executeGradleCommand(
+                projectName, "clean", "compileDebugSources",
+                String.format("-DslToken=%s", token),
+                String.format("-DbuildName=%s", buildName),
+                String.format("-DandroidPluginVersion=%s", androidPluginVersion)
+        );
+    }
+
 
     private void setGradleVersion(String projectName, String gradleVersion) throws Exception {
         executeGradleCommand(projectName, "wrapper", "--gradle-version", gradleVersion);

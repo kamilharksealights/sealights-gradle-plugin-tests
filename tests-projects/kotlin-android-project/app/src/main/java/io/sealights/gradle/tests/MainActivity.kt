@@ -9,4 +9,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
     }
 
+    fun kotlinFun() {
+
+    }
+
 }

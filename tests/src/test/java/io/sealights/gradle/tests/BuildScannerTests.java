@@ -8,7 +8,6 @@ import io.sealights.onpremise.agents.infra.component.tests.mockserver.MockServer
 import io.sealights.onpremise.agents.infra.env.OsDetector;
 import io.sealights.onpremise.agents.infra.types.Component;
 import lombok.SneakyThrows;
-import org.jetbrains.annotations.NotNull;
 import org.junit.*;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
@@ -78,6 +77,7 @@ public class BuildScannerTests {
             assertThat(extractMethodNames(agentEvents, buildName)).containsExactly("public final int multiply(int, int)", "public KotlinExampleClass()");
         }
     }
+
     @Test
     public void shouldScanJavaAndroidProjects() throws Exception {
         String projectName = "java-only-android-project";
@@ -85,7 +85,7 @@ public class BuildScannerTests {
             setGradleVersion(projectName, gradleVersion);
 
             for (String androidPluginVersion : gradleToAndroidPluginVersions.get(gradleVersion)) {
-                String buildName = "android-build-" + gradleVersion;
+                String buildName = "java-android-build-" + gradleVersion;
 
                 executeAndroidBuild(projectName, buildName, androidPluginVersion);
 
@@ -96,7 +96,25 @@ public class BuildScannerTests {
         }
     }
 
-    @NotNull
+    @Test
+    public void shouldScanKotlinAndroidProjects() throws Exception {
+        String projectName = "kotlin-android-project";
+        for (String gradleVersion : gradleToAndroidPluginVersions.keySet()) {
+            setGradleVersion(projectName, gradleVersion);
+
+            for (String androidPluginVersion : gradleToAndroidPluginVersions.get(gradleVersion)) {
+                String buildName = "kotlin-android-build-" + gradleVersion;
+
+                executeAndroidBuild(projectName, buildName, androidPluginVersion);
+
+                List<DefaultMockServerAPI.BuildMapping> agentEvents = mockServerAPI.getBuildMappings();
+                assertThat(extractMethodNames(agentEvents, buildName)).
+                        contains("public final void kotlinFun()", "protected void onCreate(Bundle)", "public MainActivity()");
+            }
+        }
+    }
+
+
     private List<String> extractMethodNames(List<DefaultMockServerAPI.BuildMapping> agentEvents, String buildName) {
         List<String> methodNames = agentEvents.stream()
                 .filter(e -> e.getMeta().get(METADATA_BUILD_KEY).equals(buildName))
